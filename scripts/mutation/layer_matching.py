@@ -1,10 +1,12 @@
 import os
 import warnings
+
 warnings.filterwarnings("ignore")
 warnings.filterwarnings("ignore")
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = '2' # 只显示 warning 和 Error
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = '2'  # 只显示 warning 和 Error
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 os.environ["CUDA_VISIBLE_DEVICES"] = ""
+
 
 class LayerMatching:
     concat_size_limit = 1e4
@@ -60,6 +62,91 @@ class LayerMatching:
         self.input_legal['lstm'] = LayerMatching.lstm_dense_input_legal
         self.layer_concats['conv_lstm_2d'] = LayerMatching.conv_lstm_2d_dense
         self.input_legal['conv_lstm_2d'] = LayerMatching.conv_lstm_2d_dense_input_legal
+        # JTJ在下面扩展了MLA
+        self.layer_concats['separable_conv_1d'] = LayerMatching.separable_conv_1d_dense
+        self.input_legal['separable_conv_1d'] = LayerMatching.separable_conv_1d_dense_input_legal
+        self.layer_concats['separable_conv_2d'] = LayerMatching.separable_conv_2d_dense
+        self.input_legal['separable_conv_2d'] = LayerMatching.separable_conv_2d_dense_input_legal
+        self.layer_concats['depthwise_conv_2d'] = LayerMatching.depthwise_conv_2d_dense
+        self.input_legal['depthwise_conv_2d'] = LayerMatching.depthwise_conv_2d_dense_input_legal
+        self.layer_concats['conv_2d_transpose'] = LayerMatching.conv_2d_transpose_dense
+        self.input_legal['conv_2d_transpose'] = LayerMatching.conv_2d_transpose_dense_input_legal
+        self.layer_concats['conv_3d_transpose'] = LayerMatching.conv_3d_transpose_dense
+        self.input_legal['conv_3d_transpose'] = LayerMatching.conv_3d_transpose_dense_input_legal
+        self.layer_concats['max_pooling_1d'] = LayerMatching.max_pooling_1d_dense
+        self.input_legal['max_pooling_1d'] = LayerMatching.pooling_1d_dense_input_legal
+        self.layer_concats['average_pooling_1d'] = LayerMatching.average_pooling_1d_dense
+        self.input_legal['average_pooling_1d'] = LayerMatching.pooling_1d_dense_input_legal
+        self.layer_concats['max_pooling_2d'] = LayerMatching.max_pooling_2d_dense
+        self.input_legal['max_pooling_2d'] = LayerMatching.pooling_2d_dense_input_legal
+        self.layer_concats['average_pooling_2d'] = LayerMatching.average_pooling_2d_dense
+        self.input_legal['average_pooling_2d'] = LayerMatching.pooling_2d_dense_input_legal
+        self.layer_concats['max_pooling_3d'] = LayerMatching.max_pooling_3d_dense
+        self.input_legal['max_pooling_3d'] = LayerMatching.pooling_3d_dense_input_legal
+        self.layer_concats['average_pooling_3d'] = LayerMatching.average_pooling_3d_dense
+        self.input_legal['average_pooling_3d'] = LayerMatching.pooling_3d_dense_input_legal
+        self.layer_concats['batch_normalization'] = LayerMatching.batch_normalization_dense
+        self.input_legal['batch_normalization'] = LayerMatching.batch_normalization_dense_input_legal
+        self.layer_concats['leaky_relu'] = LayerMatching.leaky_relu_dense
+        self.input_legal['leaky_relu'] = LayerMatching.leaky_relu_dense_input_legal
+        self.layer_concats['prelu'] = LayerMatching.prelu_dense
+        self.input_legal['prelu'] = LayerMatching.prelu_dense_input_legal
+        self.layer_concats['elu'] = LayerMatching.elu_dense
+        self.input_legal['elu'] = LayerMatching.elu_dense_input_legal
+        self.layer_concats['thresholded_relu'] = LayerMatching.thresholded_relu_dense
+        self.input_legal['thresholded_relu'] = LayerMatching.thresholded_relu_dense_input_legal
+        self.layer_concats['softmax'] = LayerMatching.softmax_dense
+        self.input_legal['softmax'] = LayerMatching.softmax_dense_input_legal
+        self.layer_concats['relu'] = LayerMatching.relu_dense
+        self.input_legal['relu'] = LayerMatching.relu_dense_input_legal
+        self.layer_concats['dropout'] = LayerMatching.dropout_dense
+        self.input_legal['dropout'] = LayerMatching.dropout_dense_input_legal
+        self.layer_concats['timeDistributed'] = LayerMatching.timeDistributed_dense
+        self.input_legal['timeDistributed'] = LayerMatching.timeDistributed_dense_input_legal
+        self.layer_concats['activity_normalization'] = LayerMatching.activity_normalization_dense
+        self.input_legal['activity_normalization'] = LayerMatching.activity_normalization_dense_input_legal
+        self.layer_concats['locally_Connected1D'] = LayerMatching.locally_Connected1D
+        self.input_legal['locally_Connected1D'] = LayerMatching.locally_Connected1D_input_legal
+        self.layer_concats['locally_Connected2D'] = LayerMatching.locally_Connected2D
+        self.input_legal['locally_Connected2D'] = LayerMatching.locally_Connected2D_input_legal
+        # JTJ在这里结束了扩展
+
+    # JTJ添加了Reshape、Embedding块
+    def reshape_block(input_shape, output_shape):
+        import keras
+        layer_concat = []
+        if (len(input_shape) > 2):
+            layer_concat.append(keras.layers.Flatten())
+        units = 1
+        for i in range(len(output_shape)):
+            if i == 0:
+                continue
+            units *= output_shape[i]
+        layer_concat.append(keras.layers.Dense(units))
+        layer_concat.append(keras.layers.Reshape(output_shape[1:]))
+        return layer_concat
+
+
+    def reshape_block_input_legal(input_shape):
+        units = 1
+        for i in range(len(input_shape)):
+            if i == 0:
+                continue
+            units *= input_shape[i]
+        return units <= LayerMatching.concat_size_limit
+
+    def embedding_dense(input_shape):
+        # input_shape = input_shape.as_list()
+        import keras
+        layer = keras.layers.Embedding(1000, input_shape[1])
+        layer.name += '_insert'
+        return layer
+
+    def embedding_input_legal(input_shape):
+        input_shape = input_shape.as_list()
+        return len(input_shape) == 2 and input_shape[0] is None and input_shape[1] is not None
+
+    # JTJ结束了Reshape块、Embedding块的添加
 
     @staticmethod
     def flatten(input_shape):
@@ -167,7 +254,8 @@ class LayerMatching:
         import keras
         layer_concat = []
         layer_concat.append(keras.layers.Cropping3D(cropping=((1, 1), (1, 1), (1, 1))))
-        layer_concat.append(keras.layers.Reshape(((input_shape[1] - 2) * (input_shape[2] - 2) * (input_shape[3] - 2) * input_shape[4],)))
+        layer_concat.append(keras.layers.Reshape(
+            ((input_shape[1] - 2) * (input_shape[2] - 2) * (input_shape[3] - 2) * input_shape[4],)))
         layer_concat.append(keras.layers.Dense(input_shape[1] * input_shape[2] * input_shape[3] * input_shape[4]))
         layer_concat.append(keras.layers.Reshape(input_shape[1:]))
         return layer_concat
@@ -415,7 +503,8 @@ class LayerMatching:
     def conv_lstm_2d_dense(input_shape):
         import keras
         layer_concat = []
-        layer_concat.append(keras.layers.ConvLSTM2D(input_shape[-1], kernel_size=(1, 1), strides=(1, 1), padding='same', return_sequences=True))
+        layer_concat.append(keras.layers.ConvLSTM2D(input_shape[-1], kernel_size=(1, 1), strides=(1, 1), padding='same',
+                                                    return_sequences=True))
         return layer_concat
 
     @staticmethod
@@ -426,6 +515,298 @@ class LayerMatching:
                and input_shape[3] is not None and input_shape[3] > 3 \
                and input_shape[4] is not None \
                and input_shape[1] * input_shape[2] * input_shape[3] * input_shape[4] <= LayerMatching.concat_size_limit
+
+    # JTJ在这里开始了添加
+    @staticmethod
+    def separable_conv_1d_dense(input_shape):
+        import keras
+        layer_concat = []
+        layer_concat.append(keras.layers.SeparableConv1D(input_shape[-1], 3, strides=1, padding='same'))
+        return layer_concat
+
+    @staticmethod
+    def separable_conv_1d_dense_input_legal(input_shape):
+        input_shape = input_shape.as_list()
+        return len(input_shape) == 3 and input_shape[0] is None and input_shape[1] is not None and input_shape[1] >= 3
+
+    @staticmethod
+    def separable_conv_2d_dense(input_shape):
+        import keras
+        layer_concat = []
+        layer_concat.append(keras.layers.SeparableConv2D(input_shape[-1], 3, strides=(1, 1), padding='same'))
+        return layer_concat
+
+    @staticmethod
+    def separable_conv_2d_dense_input_legal(input_shape):
+        input_shape = input_shape.as_list()
+        return len(input_shape) == 4 and input_shape[0] is None and input_shape[1] is not None and input_shape[1] >= 3 \
+               and input_shape[2] is not None and input_shape[2] >= 3
+
+    @staticmethod
+    def depthwise_conv_2d_dense(input_shape):
+        import keras
+        layer_concat = []
+        layer_concat.append(keras.layers.DepthwiseConv2D(3, strides=(1, 1), padding='same'))
+        return layer_concat
+
+    @staticmethod
+    def depthwise_conv_2d_dense_input_legal(input_shape):
+        input_shape = input_shape.as_list()
+        return len(input_shape) == 4 and input_shape[0] is None and input_shape[1] is not None and input_shape[1] >= 3 \
+               and input_shape[2] is not None and input_shape[2] >= 3
+
+    @staticmethod
+    def conv_2d_transpose_dense(input_shape):
+        import keras
+        layer_concat = []
+        layer_concat.append(keras.layers.Conv2DTranspose(input_shape[-1], 3, strides=(1, 1), padding='same'))
+        return layer_concat
+
+    @staticmethod
+    def conv_2d_transpose_dense_input_legal(input_shape):
+        input_shape = input_shape.as_list()
+        return len(input_shape) == 4 and input_shape[0] is None and input_shape[1] is not None and input_shape[1] >= 3 \
+               and input_shape[2] is not None and input_shape[2] >= 3
+
+    @staticmethod
+    def conv_3d_transpose_dense(input_shape):
+        import keras
+        layer_concat = []
+        layer_concat.append(keras.layers.Conv3DTranspose(input_shape[-1], 3, strides=(1, 1, 1), padding='same'))
+        return layer_concat
+
+    @staticmethod
+    def conv_3d_transpose_dense_input_legal(input_shape):
+        input_shape = input_shape.as_list()
+        return len(input_shape) == 5 and input_shape[0] is None \
+               and input_shape[1] is not None and input_shape[1] >= 3 \
+               and input_shape[2] is not None and input_shape[2] >= 3 \
+               and input_shape[3] is not None and input_shape[3] >= 3
+
+    @staticmethod
+    def max_pooling_1d_dense(input_shape):
+        import keras
+        layer_concat = []
+        layer_concat.append(keras.layers.MaxPooling1D())
+        layer_concat.append(keras.layers.Dense(input_shape[1] * input_shape[2]))
+        layer_concat.append(keras.layers.Reshape(input_shape[1:]))
+        return layer_concat
+
+    @staticmethod
+    def average_pooling_1d_dense(input_shape):
+        import keras
+        layer_concat = []
+        layer_concat.append(keras.layers.AveragePooling1D())
+        layer_concat.append(keras.layers.Dense(input_shape[1] * input_shape[2]))
+        layer_concat.append(keras.layers.Reshape(input_shape[1:]))
+        return layer_concat
+
+    @staticmethod
+    def pooling_1d_dense_input_legal(input_shape):
+        input_shape = input_shape.as_list()
+        return len(input_shape) == 3 and input_shape[0] is None and input_shape[1] is not None \
+               and input_shape[2] is not None and input_shape[1] * input_shape[2] <= LayerMatching.concat_size_limit
+
+    @staticmethod
+    def max_pooling_2d_dense(input_shape):
+        import keras
+        layer_concat = []
+        layer_concat.append(keras.layers.MaxPooling2D())
+        layer_concat.append(keras.layers.Dense(input_shape[1] * input_shape[2] * input_shape[3]))
+        layer_concat.append(keras.layers.Reshape(input_shape[1:]))
+        return layer_concat
+
+    @staticmethod
+    def average_pooling_2d_dense(input_shape):
+        import keras
+        layer_concat = []
+        layer_concat.append(keras.layers.AveragePooling2D())
+        layer_concat.append(keras.layers.Dense(input_shape[1] * input_shape[2] * input_shape[3]))
+        layer_concat.append(keras.layers.Reshape(input_shape[1:]))
+        return layer_concat
+
+    @staticmethod
+    def pooling_2d_dense_input_legal(input_shape):
+        input_shape = input_shape.as_list()
+        return len(input_shape) == 4 and input_shape[0] is None \
+               and input_shape[1] is not None \
+               and input_shape[2] is not None \
+               and input_shape[3] is not None \
+               and input_shape[1] * input_shape[2] * input_shape[3] <= LayerMatching.concat_size_limit
+
+    @staticmethod
+    def max_pooling_3d_dense(input_shape):
+        import keras
+        layer_concat = []
+        layer_concat.append(keras.layers.MaxPooling3D())
+        layer_concat.append(keras.layers.Flatten())
+        layer_concat.append(keras.layers.Dense(input_shape[1] * input_shape[2] * input_shape[3] * input_shape[4]))
+        layer_concat.append(keras.layers.Reshape(input_shape[1:]))
+        return layer_concat
+
+    @staticmethod
+    def average_pooling_3d_dense(input_shape):
+        import keras
+        layer_concat = []
+        layer_concat.append(keras.layers.AveragePooling3D())
+        layer_concat.append(keras.layers.Flatten())
+        layer_concat.append(keras.layers.Dense(input_shape[1] * input_shape[2] * input_shape[3] * input_shape[4]))
+        layer_concat.append(keras.layers.Reshape(input_shape[1:]))
+        return layer_concat
+
+    @staticmethod
+    def pooling_3d_dense_input_legal(input_shape):
+        input_shape = input_shape.as_list()
+        return len(input_shape) == 5 and input_shape[0] is None \
+               and input_shape[1] is not None \
+               and input_shape[2] is not None \
+               and input_shape[3] is not None \
+               and input_shape[4] is not None \
+               and input_shape[1] * input_shape[2] * input_shape[3] * input_shape[4] <= LayerMatching.concat_size_limit
+
+    @staticmethod
+    def batch_normalization_dense(input_shape):
+        import keras
+        layer_concat = []
+        layer_concat.append(keras.layers.BatchNormalization(input_shape=input_shape[1:]))
+        return layer_concat
+
+    @staticmethod
+    def batch_normalization_dense_input_legal(input_shape):
+        return True
+
+    @staticmethod
+    def leaky_relu_dense(input_shape):
+        import keras
+        layer_concat = []
+        layer_concat.append(keras.layers.LeakyReLU(input_shape=input_shape[1:]))
+        return layer_concat
+
+    @staticmethod
+    def leaky_relu_dense_input_legal(input_shape):
+        return True
+
+    @staticmethod
+    def prelu_dense(input_shape):
+        import keras
+        layer_concat = []
+        layer_concat.append(keras.layers.PReLU(input_shape=input_shape[1:], alpha_initializer='RandomNormal'))
+        return layer_concat
+
+    @staticmethod
+    def prelu_dense_input_legal(input_shape):
+        return True
+
+    @staticmethod
+    def elu_dense(input_shape):
+        import keras
+        layer_concat = []
+        layer_concat.append(keras.layers.ELU(input_shape=input_shape[1:]))
+        return layer_concat
+
+    @staticmethod
+    def elu_dense_input_legal(input_shape):
+        return True
+
+    @staticmethod
+    def thresholded_relu_dense(input_shape):
+        import keras
+        layer_concat = []
+        layer_concat.append(keras.layers.ThresholdedReLU(input_shape=input_shape[1:]))
+        return layer_concat
+
+    @staticmethod
+    def thresholded_relu_dense_input_legal(input_shape):
+        return True
+
+    @staticmethod
+    def softmax_dense(input_shape):
+        import keras
+        layer_concat = []
+        layer_concat.append(keras.layers.Softmax(input_shape=input_shape[1:]))
+        return layer_concat
+
+    @staticmethod
+    def softmax_dense_input_legal(input_shape):
+        return True
+
+    @staticmethod
+    def relu_dense(input_shape):
+        import keras
+        layer_concat = []
+        layer_concat.append(keras.layers.ReLU(max_value=1.0, input_shape=input_shape[1:]))
+        return layer_concat
+
+    @staticmethod
+    def relu_dense_input_legal(input_shape):
+        return True
+
+    @staticmethod
+    def dropout_dense(input_shape):
+        import keras
+        layer_concat = []
+        layer_concat.append(keras.layers.Dropout(0.2, input_shape=input_shape[1:]))
+        return layer_concat
+
+    @staticmethod
+    def dropout_dense_input_legal(input_shape):
+        return True
+
+    @staticmethod
+    def timeDistributed_dense(input_shape):
+        import keras
+        layer_concat = []
+        dense_layer = keras.layers.Dense(input_shape[-1])
+        layer_concat.append(keras.layers.TimeDistributed(dense_layer, input_shape=input_shape))
+        return layer_concat
+
+    @staticmethod
+    def timeDistributed_dense_input_legal(input_shape):
+        input_shape = input_shape.as_list()
+        return len(input_shape) == 4 and input_shape[0] is None and input_shape[1] is not None \
+               and input_shape[2] is not None and input_shape[3] is not None
+
+    @staticmethod
+    def activity_normalization_dense(input_shape):
+        import keras
+        layer_concat = []
+        layer_concat.append(keras.layers.ActivityRegularization(0.5, 0.5))
+        return layer_concat
+
+    @staticmethod
+    def activity_normalization_dense_input_legal(input_shape):
+        return True
+
+    @staticmethod
+    def locally_Connected2D(input_shape):
+        import keras
+        layer_concat = []
+        layer_concat.append(keras.layers.LocallyConnected2D(input_shape[-1], 3, strides=(1, 1)))
+        for layer in LayerMatching.reshape_block(input_shape, input_shape):
+            layer_concat.append(layer)
+        return layer_concat
+
+    @staticmethod
+    def locally_Connected2D_input_legal(input_shape):
+        return len(input_shape) == 4 and input_shape[0] is None and input_shape[1] is not None and input_shape[1] >= 3 \
+               and input_shape[2] is not None and input_shape[2] >= 3 and LayerMatching.reshape_block_input_legal(input_shape)
+
+    @staticmethod
+    def locally_Connected1D(input_shape):
+        import keras
+        layer_concat = []
+        layer_concat.append(keras.layers.LocallyConnected1D(input_shape[-1], 3, strides=1))
+        for layer in LayerMatching.reshape_block(input_shape, input_shape):
+            layer_concat.append(layer)
+        return layer_concat
+
+    @staticmethod
+    def locally_Connected1D_input_legal(input_shape):
+        return len(input_shape) == 3 and input_shape[0] is None and input_shape[1] is not None \
+               and input_shape[2] is not None and LayerMatching.reshape_block_input_legal(input_shape)
+
+    # JTJ在这里结束了扩展
+
 
 if __name__ == '__main__':
     pass

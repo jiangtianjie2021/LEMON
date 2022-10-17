@@ -1,13 +1,16 @@
 import sys
 from scripts.mutation.model_mutation_operators import *
 import argparse
+import keras.backend as K
+
 warnings.filterwarnings("ignore")
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = '2' # 只显示 warning 和 Error
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = '2'  # 只显示 warning 和 Error
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 os.environ["CUDA_VISIBLE_DEVICES"] = ""
 mylogger = Logger()
 
-def generate_model_by_model_mutation(model, operator,mutate_ratio=0.3):
+
+def generate_model_by_model_mutation(model, operator, mutate_ratio=0.3):
     """
     Generate models using specific mutate operator
     :param model: model loaded by keras (tensorflow backend default)
@@ -16,12 +19,13 @@ def generate_model_by_model_mutation(model, operator,mutate_ratio=0.3):
     :return: mutation model object
     """
     if operator == 'WS':
-        mutate_indices = utils.ModelUtils.weighted_layer_indices(model)
+        # mutate_indices = utils.ModelUtils.weighted_layer_indices(model)
         mylogger.info("Generating model using {}".format(operator))
-        return WS_mut(model=model,mutation_ratio=mutate_ratio,mutated_layer_indices=mutate_indices)
+        # return WS_mut(model=model, mutation_ratio=mutate_ratio, mutated_layer_indices=mutate_indices)
+        return WS_mut(model=model, mutation_ratio=mutate_ratio)
     elif operator == 'GF':
         mylogger.info("Generating model using {}".format(operator))
-        return GF_mut(model=model,mutation_ratio=mutate_ratio)
+        return GF_mut(model=model, mutation_ratio=mutate_ratio)
     elif operator == 'NEB':
         mylogger.info("Generating model using {}".format(operator))
         return NEB_mut(model=model, mutation_ratio=mutate_ratio)
@@ -52,17 +56,34 @@ def generate_model_by_model_mutation(model, operator,mutate_ratio=0.3):
     elif operator == 'MLA':
         mylogger.info("Generating model using {}".format(operator))
         return MLA_mut(model=model)
+    elif operator == 'MergLA':
+        mylogger.info("Generating model using {}".format(operator))
+        return MergLA_mut(model=model)
+    elif operator == 'EmbLA':
+        mylogger.info("Generating model using {}".format(operator))
+        return EmbLA_mut(model=model)
     else:
         mylogger.info("No such Mutation operator {}".format(operator))
         return None
 
 
 def all_mutate_ops():
-    return ['WS','GF','NEB','NAI','NS','ARem','ARep','LA','LC','LR','LS','MLA']
+    return ['WS', 'GF', 'NEB', 'NAI', 'NS', 'ARem', 'ARep', 'LA', 'LC', 'LR', 'LS', 'MLA', 'MergLA', 'EmbLA']
+def custom_objects():
 
+    def no_activation(x):
+        return x
+
+    def leakyrelu(x):
+        import keras.backend as K
+        return K.relu(x, alpha=0.01)
+
+    objects = {}
+    objects['no_activation'] = no_activation
+    objects['leakyrelu'] = leakyrelu
+    return objects
 
 if __name__ == '__main__':
-
 
     """Parser of command args"""
     parse = argparse.ArgumentParser()
@@ -73,9 +94,11 @@ if __name__ == '__main__':
     flags, unparsed = parse.parse_known_args(sys.argv[1:])
 
     import keras
+
     model_path = flags.model
     mutate_ratio = flags.mutate_ratio
-    print("Current {}; Mutate ratio {}".format(flags.mutate_op,mutate_ratio))
+    print("Current {}; Mutate ratio {}".format(flags.mutate_op, mutate_ratio))
+
     origin_model = keras.models.load_model(model_path, custom_objects=utils.ModelUtils.custom_objects())
     mutated_model = generate_model_by_model_mutation(model=origin_model,operator=flags.mutate_op,mutate_ratio=mutate_ratio)
 
@@ -84,9 +107,3 @@ if __name__ == '__main__':
         raise Exception("Error: Model mutation using {} failed".format(flags.mutate_op))
     else:
         mutated_model.save(flags.save_path)
-
-
-
-
-
-

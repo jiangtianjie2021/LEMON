@@ -1,10 +1,12 @@
+import keras.layers
 import numpy as np
 import os
 import warnings
+
 np.random.seed(20200501)
 warnings.filterwarnings("ignore")
 warnings.filterwarnings("ignore")
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = '2' # 只显示 warning 和 Error
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = '2'  # 只显示 warning 和 Error
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 os.environ["CUDA_VISIBLE_DEVICES"] = ""
 
@@ -101,12 +103,16 @@ class LayerUtils:
         self.is_input_legal['softmax_layer'] = LayerUtils.softmax_layer_input_legal
         self.available_model_level_layers['relu_layer'] = LayerUtils.relu_layer
         self.is_input_legal['relu_layer'] = LayerUtils.relu_layer_input_legal
-
+        # JTJ扩展
+        self.available_model_level_layers['dropout'] = LayerUtils.dropout
+        self.is_input_legal['dropout'] = LayerUtils.dropout_input_legal
+        # JTJ扩展结束
         self.available_source_level_layers['activity_regularization_l1'] = LayerUtils.activity_regularization_l1
         self.is_input_legal['activity_regularization_l1'] = LayerUtils.activity_regularization_input_legal
         self.available_source_level_layers['activity_regularization_l2'] = LayerUtils.activity_regularization_l1
         self.is_input_legal['activity_regularization_l2'] = LayerUtils.activity_regularization_input_legal
 
+    # JTJ在这里添加了一个fix，替换掉了原有的白名单
     def is_layer_in_weight_change_white_list(self, layer):
         import keras
         white_list = [keras.layers.Dense, keras.layers.Conv1D, keras.layers.Conv2D, keras.layers.Conv3D,
@@ -122,6 +128,20 @@ class LayerUtils:
             if isinstance(layer, l):
                 return True
         return False
+
+    def is_layer_in_weight_change_white_list_fix(self, layer):
+        import keras
+        white_list = [keras.layers.Dense, keras.layers.Conv1D, keras.layers.Conv2D, keras.layers.Conv3D,
+                      keras.layers.DepthwiseConv2D,
+                      keras.layers.Conv2DTranspose, keras.layers.Conv3DTranspose,
+                      keras.layers.BatchNormalization
+                      ]
+        # print(white_list)
+        for l in white_list:
+            if isinstance(layer, l):
+                return True
+        return False
+    # JTJ结束了扩展
 
     @staticmethod
     def clone(layer):
@@ -170,7 +190,7 @@ class LayerUtils:
     def conv2d(input_shape):
         # input_shape = input_shape.as_list()
         import keras
-        layer = keras.layers.Conv2D(input_shape[-1], 3, strides=(1,1), padding='same')
+        layer = keras.layers.Conv2D(input_shape[-1], 3, strides=(1, 1), padding='same')
         layer.name += '_insert'
         return layer
 
@@ -195,7 +215,7 @@ class LayerUtils:
     @staticmethod
     def separable_conv_2d(input_shape):
         import keras
-        layer = keras.layers.SeparableConv2D(input_shape[-1], 3, strides=(1,1), padding='same')
+        layer = keras.layers.SeparableConv2D(input_shape[-1], 3, strides=(1, 1), padding='same')
         layer.name += '_insert'
         return layer
 
@@ -208,7 +228,7 @@ class LayerUtils:
     @staticmethod
     def depthwise_conv_2d(input_shape):
         import keras
-        layer = keras.layers.DepthwiseConv2D(3, strides=(1,1), padding='same')
+        layer = keras.layers.DepthwiseConv2D(3, strides=(1, 1), padding='same')
         layer.name += '_insert'
         return layer
 
@@ -218,10 +238,11 @@ class LayerUtils:
         return len(input_shape) == 4 and input_shape[0] is None and input_shape[1] is not None and input_shape[1] >= 3 \
                and input_shape[2] is not None and input_shape[2] >= 3
 
+
     @staticmethod
     def conv_2d_transpose(input_shape):
         import keras
-        layer = keras.layers.Conv2DTranspose(input_shape[-1], 3, strides=(1,1), padding='same')
+        layer = keras.layers.Conv2DTranspose(input_shape[-1], 3, strides=(1, 1), padding='same')
         layer.name += '_insert'
         return layer
 
@@ -234,7 +255,7 @@ class LayerUtils:
     @staticmethod
     def conv_3d(input_shape):
         import keras
-        layer = keras.layers.Conv3D(input_shape[-1], 3, strides=(1,1,1), padding='same')
+        layer = keras.layers.Conv3D(input_shape[-1], 3, strides=(1, 1, 1), padding='same')
         layer.name += '_insert'
         return layer
 
@@ -249,7 +270,7 @@ class LayerUtils:
     @staticmethod
     def conv_3d_transpose(input_shape):
         import keras
-        layer = keras.layers.Conv3DTranspose(input_shape[-1], 3, strides=(1,1,1), padding='same')
+        layer = keras.layers.Conv3DTranspose(input_shape[-1], 3, strides=(1, 1, 1), padding='same')
         layer.name += '_insert'
         return layer
 
@@ -436,11 +457,39 @@ class LayerUtils:
     def activity_regularization_input_legal(input_shape):
         return True
 
+    # JTJ扩展了Dropout
+    @staticmethod
+    def dropout(input_shape):
+        import keras
+        layer = keras.layers.Dropout(0.2, input_shape=input_shape[1:])
+        layer.name += '_insert'
+        return layer
+
+    @staticmethod
+    def dropout_input_legal(input_shape):
+        return True
+    # JTJ结束了扩展
+
+# JTJ扩展了MergeUtils
+class MergeUtils:
+    def __init__(self):
+        # these layers take effect both for training and testing
+        self.available_model_merge_layers = {}
+        # these layers only take effect for training
+        # self.available_source_level_layers = {}
+        # self.is_input_legal = {}
+
+        self.available_model_merge_layers['Concatenate'] = keras.layers.Concatenate(axis=0)
+        self.available_model_merge_layers['Add'] = keras.layers.Add()
+        self.available_model_merge_layers['Subtract'] = keras.layers.Subtract()
+        self.available_model_merge_layers['Multiply'] = keras.layers.Multiply()
+        # self.available_model_merge_layers['Dot'] = keras.layers.Dot()
+        self.available_model_merge_layers['Maximum'] = keras.layers.Maximum()
+        self.available_model_merge_layers['Minimum'] = keras.layers.Minimum()
+# JTJ结束了扩展
 
 if __name__ == '__main__':
-    # activation_utils = ActivationUtils()
-    # result = activation_utils.pick_activation_randomly(['relu', 'leakyrelu'])
-    # print(result)
     layerUtils = LayerUtils()
     result = layerUtils.is_layer_in_weight_change_white_list(layerUtils.available_model_level_layers['dense']([None, 3]))
     print(result)
+

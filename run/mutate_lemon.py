@@ -308,9 +308,11 @@ if __name__ == "__main__":
     parse = argparse.ArgumentParser()
     parse.add_argument("--is_mutate", type=ast.literal_eval, default=False,
                        help="parameter to determine mutation option")
+    # JTJ在这里添加了, 'MergLA', 'EmbLA'
     parse.add_argument("--mutate_op", type=str, nargs='+',
-                       choices=['WS', 'GF', 'NEB', 'NAI', 'NS', 'ARem', 'ARep', 'LA', 'LC', 'LR', 'LS', 'MLA']
+                       choices=['WS', 'GF', 'NEB', 'NAI', 'NS', 'ARem', 'ARep', 'LA', 'LC', 'LR', 'LS', 'MLA', 'MergLA', 'EmbLA']
                        , help="parameter to determine mutation option")
+    # JTJ结束了添加
     parse.add_argument("--model", type=str, help="relative path of model file(from root dir)")
     parse.add_argument("--output_dir", type=str, help="relative path of output dir(from root dir)")
     parse.add_argument("--backends", type=str, nargs='+', help="list of backends")
