@@ -6,6 +6,7 @@ import warnings
 import datetime
 import configparser
 import numpy as np
+from scripts.tools.random_layers import random_layer, random_para_layer
 
 np.random.seed(20200501)
 warnings.filterwarnings("ignore")
@@ -21,19 +22,24 @@ class ModelUtils:
         pass
 
     @staticmethod
-    def model_copy(model, mode=''):
+    def model_copy(model, mode='', change_params_list=None):
         from scripts.mutation.mutation_utils import LayerUtils
         import keras
         suffix = '_copy_' + mode
         if model.__class__.__name__ == 'Sequential':
             new_layers = []
-            for layer in model.layers:
-                new_layer = LayerUtils.clone(layer)
+            for i, layer in enumerate(model.layers):
+                if i in change_params_list:
+                    changed_dict = random_layer(layer.__class__.__name__)
+                    new_layer = random_para_layer(layer, changed_dict)
+                else:
+                    new_layer = LayerUtils.clone(layer)
                 new_layer.name += suffix
                 new_layers.append(new_layer)
             new_model = keras.Sequential(layers=new_layers, name=model.name + suffix)
         else:
-            new_model = ModelUtils.functional_model_operation(model, suffix=suffix)
+            new_model = ModelUtils.functional_model_operation_dict(model, suffix=suffix,
+                                                                  change_params_list=change_params_list)
 
         s = datetime.datetime.now()
         new_model.set_weights(model.get_weights())
@@ -43,6 +49,45 @@ class ModelUtils:
         print("Set model weights! {} hour,{} min,{} sec".format(h, m, s))
         del model
         return new_model
+
+    @staticmethod
+    def functional_model_operation_dict(model, operation=None, suffix=None, change_params_list=None):
+        from scripts.mutation.mutation_utils import LayerUtils
+        input_layers = {}
+        output_tensors = {}
+        model_output = None
+        for layer in model.layers:
+            for node in layer._outbound_nodes:
+                layer_name = node.outbound_layer.name
+                if layer_name not in input_layers.keys():
+                    input_layers[layer_name] = [layer.name]
+                else:
+                    input_layers[layer_name].append(layer.name)
+
+        output_tensors[model.layers[0].name] = model.input
+
+        for i, layer in enumerate(model.layers[1:]):
+            layer_input_tensors = [output_tensors[l] for l in input_layers[layer.name]]
+            if len(layer_input_tensors) == 1:
+                layer_input_tensors = layer_input_tensors[0]
+
+            cloned_layer = LayerUtils.clone(layer)
+            if i + 1 in change_params_list:
+                changed_dict = random_layer(layer.__class__.__name__)
+                new_layer = random_para_layer(cloned_layer, changed_dict)
+            else:
+                new_layer = cloned_layer
+
+            if suffix is not None:
+                new_layer.name += suffix
+            x = new_layer(layer_input_tensors)
+
+            output_tensors[layer.name] = x
+            model_output = x
+
+        import keras
+        return keras.Model(inputs=model.inputs, outputs=model_output)
+
 
     @staticmethod
     def functional_model_operation(model, operation=None, suffix=None):
@@ -276,7 +321,7 @@ class DataUtils:
         lemon_cfg.read("./config/experiments.conf")
         dataset_dir = lemon_cfg['parameters']['dataset_dir']
         x_test = y_test = []
-        if 'fashion-mnist' in exp:
+        if 'fashion-mnist' in exp or "fashionmnist" in exp:
             _, (x_test, y_test) = keras.datasets.fashion_mnist.load_data()
             x_test = DataUtils.get_fashion_mnist_data(x_test)
             y_test = keras.utils.to_categorical(y_test, num_classes=10)
@@ -291,7 +336,7 @@ class DataUtils:
         elif 'imagenet' in exp:
             input_precessor = DataUtils.imagenet_preprocess_dict()
             input_shapes_dict = DataUtils.imagenet_shape_dict()
-            model_name = exp.split("-")[0]
+            model_name = exp.split("_")[0]
             shape = input_shapes_dict[model_name]
             data_path = os.path.join(dataset_dir,"sampled_imagenet-1500.npz")
             data = np.load(data_path)
@@ -404,12 +449,15 @@ class DataUtils:
         keras_preprocess_dict = dict()
         keras_preprocess_dict['resnet50'] = keras.applications.resnet50.preprocess_input
         keras_preprocess_dict['densenet121'] = keras.applications.densenet.preprocess_input
-        keras_preprocess_dict['mobilenet.1.00.224'] = keras.applications.mobilenet.preprocess_input
+        keras_preprocess_dict['mobilenet'] = keras.applications.mobilenet.preprocess_input
         keras_preprocess_dict['vgg16'] = keras.applications.vgg16.preprocess_input
         keras_preprocess_dict['vgg19'] = keras.applications.vgg19.preprocess_input
-        keras_preprocess_dict['inception.v3'] = keras.applications.inception_v3.preprocess_input
-        keras_preprocess_dict['inception.v2'] = keras.applications.inception_resnet_v2.preprocess_input
+        keras_preprocess_dict['inception'] = keras.applications.inception_v3.preprocess_input
+        # keras_preprocess_dict['inception'] = keras.applications.inception_resnet_v2.preprocess_input
         keras_preprocess_dict['xception'] = keras.applications.xception.preprocess_input
+
+        keras_preprocess_dict['InceptionResNetV2'] = keras.applications.inception_resnet_v2.preprocess_input
+        keras_preprocess_dict['NASNet'] = keras.applications.nasnet.preprocess_input
         return keras_preprocess_dict
 
     @staticmethod
@@ -417,12 +465,16 @@ class DataUtils:
         image_shapes = dict()
         image_shapes['resnet50'] = (224,224)
         image_shapes['densenet121'] = (224,224)
-        image_shapes['mobilenet.1.00.224'] = (224,224)
+        image_shapes['mobilenet'] = (224,224)
         image_shapes['vgg16'] = (224,224)
         image_shapes['vgg19'] = (224, 224)
-        image_shapes['inception.v3'] = (299,299)
-        image_shapes['inception.v2'] = (299, 299)
+        image_shapes['inception'] = (299,299)
+        image_shapes['inception'] = (299, 299)
         image_shapes['xception'] = (299,299)
+
+        image_shapes['InceptionResNetV2'] = (299,299)
+        image_shapes['NASNet'] = (224,224)
+        image_shapes['squeezenet'] = (32,32)
         return image_shapes
 
 

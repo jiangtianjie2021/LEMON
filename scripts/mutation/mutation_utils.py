@@ -479,17 +479,16 @@ class MergeUtils:
         # self.available_source_level_layers = {}
         # self.is_input_legal = {}
 
-        self.available_model_merge_layers['Concatenate'] = keras.layers.Concatenate(axis=0)
+        self.available_model_merge_layers['Concatenate'] = keras.layers.Concatenate(axis=-1)
         self.available_model_merge_layers['Add'] = keras.layers.Add()
         self.available_model_merge_layers['Subtract'] = keras.layers.Subtract()
         self.available_model_merge_layers['Multiply'] = keras.layers.Multiply()
         # self.available_model_merge_layers['Dot'] = keras.layers.Dot()
-        self.available_model_merge_layers['Maximum'] = keras.layers.Maximum()
-        self.available_model_merge_layers['Minimum'] = keras.layers.Minimum()
+        # self.available_model_merge_layers['Maximum'] = keras.layers.Maximum()
+        # self.available_model_merge_layers['Minimum'] = keras.layers.Minimum()
 # JTJ结束了扩展
 
 if __name__ == '__main__':
     layerUtils = LayerUtils()
     result = layerUtils.is_layer_in_weight_change_white_list(layerUtils.available_model_level_layers['dense']([None, 3]))
     print(result)
-

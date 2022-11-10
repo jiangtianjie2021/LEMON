@@ -7,6 +7,7 @@ import random
 import os
 import warnings
 from scripts.logger.lemon_logger import Logger
+from scripts.tools.random_layers import is_layer_in_random_layer_list
 import keras
 import datetime
 
@@ -150,6 +151,18 @@ def _shuffle_dense(weights, mutate_ratio):
     return new_weights
 
 
+def _random_layers_scan(model):
+    change_params_list = []
+    layers = model.layers
+
+    for i, layer in enumerate(layers):
+        if is_layer_in_random_layer_list(layer):
+            change_params_list.append(i)
+    np.random.shuffle(change_params_list)
+
+    return change_params_list[:int(np.floor(len(layers) * 0.3))]
+
+
 def _LA_model_scan(model, new_layers, mutated_layer_indices=None):
     layer_utils = LayerUtils()
     layers = model.layers
@@ -184,6 +197,8 @@ def _MergLA_model_scan(model, new_layers, mutated_layer_indices=None):
     insertion_points = {}
     result = {}
     for i, layer in enumerate(layers):
+        if len(layer.output_shape) != 2 and len(layer.output_shape) != 4:
+            continue
         if hasattr(layer, 'activation') and 'softmax' in layer.activation.__name__.lower():
             break
         if i in positions_to_add:
@@ -279,13 +294,14 @@ def GF_mut(model, mutation_ratio, distribution='normal', STD=0.1, lower_bound=No
     # if distribution == 'uniform' and (lower_bound is None or upper_bound is None):
     #     mylogger.error('Lower bound and Upper bound is required for uniform distribution.')
     #     raise ValueError('Lower bound and Upper bound is required for uniform distribution.')
+    change_params_list = _random_layers_scan(model)
 
     mylogger.info('copying model...')
-    GF_model = utils.ModelUtils.model_copy(model, 'GF')
+    GF_model = utils.ModelUtils.model_copy(model, 'GF', change_params_list)
     mylogger.info('model copied')
 
     layers = GF_model.layers
-    mutated_layer_indices = np.arange(len(layers))
+    mutated_layer_indices = np.arange(len(layers)-1)
     if 0 < mutation_ratio <= 1.0:
         _assert_indices(mutated_layer_indices, len(layers))
         layer_utils = LayerUtils()
@@ -317,12 +333,13 @@ def GF_mut(model, mutation_ratio, distribution='normal', STD=0.1, lower_bound=No
 
 # 扩展WS算子只用于两个层
 def WS_mut(model, mutation_ratio, mutated_layer_indices=None):
+    change_params_list = _random_layers_scan(model)
     mylogger.info('copying model...')
-    WS_model = utils.ModelUtils.model_copy(model, 'WS')
+    WS_model = utils.ModelUtils.model_copy(model, 'WS', change_params_list)
     mylogger.info('model copied')
 
     layers = WS_model.layers
-    mutated_layer_indices = np.arange(len(layers)) if mutated_layer_indices is None else mutated_layer_indices
+    mutated_layer_indices = np.arange(len(layers)-1) if mutated_layer_indices is None else mutated_layer_indices
     if 0 < mutation_ratio <= 1.0:
         _assert_indices(mutated_layer_indices, len(layers))
         layer_utils = LayerUtils()
@@ -361,12 +378,13 @@ def WS_mut(model, mutation_ratio, mutated_layer_indices=None):
 
 
 def NEB_mut(model, mutation_ratio, mutated_layer_indices=None):
+    change_params_list = _random_layers_scan(model)
     mylogger.info('copying model...')
-    NEB_model = utils.ModelUtils.model_copy(model, 'NEB')
+    NEB_model = utils.ModelUtils.model_copy(model, 'NEB', change_params_list)
     mylogger.info('model copied')
 
     layers = NEB_model.layers
-    mutated_layer_indices = np.arange(len(layers)) if mutated_layer_indices is None else mutated_layer_indices
+    mutated_layer_indices = np.arange(len(layers)-1) if mutated_layer_indices is None else mutated_layer_indices
     if 0 < mutation_ratio <= 1.0:
         _assert_indices(mutated_layer_indices, len(layers))
         layer_utils = LayerUtils()
@@ -434,12 +452,13 @@ def NEB_mut(model, mutation_ratio, mutated_layer_indices=None):
 
 
 def NAI_mut(model, mutation_ratio, mutated_layer_indices=None):
+    change_params_list = _random_layers_scan(model)
     mylogger.info('copying model...')
-    NAI_model = utils.ModelUtils.model_copy(model, 'NAI')
+    NAI_model = utils.ModelUtils.model_copy(model, 'NAI', change_params_list)
     mylogger.info('model copied')
 
     layers = NAI_model.layers
-    mutated_layer_indices = np.arange(len(layers)) if mutated_layer_indices is None else mutated_layer_indices
+    mutated_layer_indices = np.arange(len(layers)-1) if mutated_layer_indices is None else mutated_layer_indices
     if 0 < mutation_ratio <= 1.0:
         _assert_indices(mutated_layer_indices, len(layers))
         layer_utils = LayerUtils()
@@ -505,12 +524,13 @@ def NAI_mut(model, mutation_ratio, mutated_layer_indices=None):
 
 
 def NS_mut(model, mutated_layer_indices=None):
+    change_params_list = _random_layers_scan(model)
     mylogger.info('copying model...')
-    NS_model = utils.ModelUtils.model_copy(model, 'NS')
+    NS_model = utils.ModelUtils.model_copy(model, 'NS', change_params_list)
     mylogger.info('model copied')
 
     layers = NS_model.layers
-    mutated_layer_indices = np.arange(len(layers)) if mutated_layer_indices is None else mutated_layer_indices
+    mutated_layer_indices = np.arange(len(layers)-1) if mutated_layer_indices is None else mutated_layer_indices
 
     _assert_indices(mutated_layer_indices, len(layers))
     layer_utils = LayerUtils()
@@ -600,7 +620,8 @@ def NS_mut(model, mutated_layer_indices=None):
 
 
 def ARem_mut(model, mutated_layer_indices=None):
-    ARem_model = utils.ModelUtils.model_copy(model, 'ARem')
+    change_params_list = _random_layers_scan(model)
+    ARem_model = utils.ModelUtils.model_copy(model, 'ARem', change_params_list)
     layers = ARem_model.layers
     # the activation of last layer should not be removed
     mutated_layer_indices = np.arange(len(layers) - 1) if mutated_layer_indices is None else mutated_layer_indices
@@ -616,8 +637,9 @@ def ARem_mut(model, mutated_layer_indices=None):
 
 
 def ARep_mut(model, new_activations=None, mutated_layer_indices=None):
+    change_params_list = _random_layers_scan(model)
     activation_utils = ActivationUtils()
-    ARep_model = utils.ModelUtils.model_copy(model, 'ARep')
+    ARep_model = utils.ModelUtils.model_copy(model, 'ARep', change_params_list)
     layers = ARep_model.layers
     # the activation of last layer should not be replaced
     mutated_layer_indices = np.arange(len(layers) - 1) if mutated_layer_indices is None else mutated_layer_indices
@@ -632,13 +654,14 @@ def ARep_mut(model, new_activations=None, mutated_layer_indices=None):
 
 
 def LA_mut(model, new_layers=None, mutated_layer_indices=None):
+    change_params_list = _random_layers_scan(model)
     layer_utils = LayerUtils()
     if new_layers is not None:
         for layer in new_layers:
             if layer not in layer_utils.available_model_level_layers.keys():
                 mylogger.error('Layer {} is not supported.'.format(layer))
                 raise Exception('Layer {} is not supported.'.format(layer))
-    LA_model = utils.ModelUtils.model_copy(model, 'LA')
+    LA_model = utils.ModelUtils.model_copy(model, 'LA', change_params_list)
 
     insertion_points = _LA_model_scan(LA_model, new_layers, mutated_layer_indices)
     if len(insertion_points.keys()) == 0:
@@ -713,7 +736,8 @@ def LA_mut(model, new_layers=None, mutated_layer_indices=None):
 
 
 def EmbLA_mut(model, new_layers=None, mutated_layer_indices=None):
-    EmbLA_model = utils.ModelUtils.model_copy(model, 'EmbLA')
+    change_params_list = _random_layers_scan(model)
+    EmbLA_model = utils.ModelUtils.model_copy(model, 'EmbLA', change_params_list)
     if LayerMatching.embedding_input_legal(model.input.shape):
         import keras
         new_model = keras.models.Sequential()
@@ -770,13 +794,14 @@ def EmbLA_mut(model, new_layers=None, mutated_layer_indices=None):
 
 
 def MLA_mut(model, new_layers=None, mutated_layer_indices=None):
+    change_params_list = _random_layers_scan(model)
     # mutiple layers addition
     layer_matching = LayerMatching()
     if new_layers is not None:
         for layer in new_layers:
             if layer not in layer_matching.layer_concats.keys():
                 raise Exception('Layer {} is not supported.'.format(layer))
-    MLA_model = utils.ModelUtils.model_copy(model, 'MLA')
+    MLA_model = utils.ModelUtils.model_copy(model, 'MLA', change_params_list)
     insertion_points = _MLA_model_scan(model, new_layers, mutated_layer_indices)
     mylogger.info(insertion_points)
     if len(insertion_points.keys()) == 0:
@@ -860,12 +885,12 @@ def MLA_mut(model, new_layers=None, mutated_layer_indices=None):
 
 
 def MergLA_mut(model, new_layers=None, mutated_layer_indices=None):
-
+    change_params_list = _random_layers_scan(model)
     layer_utils = MergeUtils()
     merge_layers = list(layer_utils.available_model_merge_layers.keys())
     merge_layer = merge_layers[np.random.randint(0, len(merge_layers))]
 
-    MergLA_model = utils.ModelUtils.model_copy(model, 'MergLA')
+    MergLA_model = utils.ModelUtils.model_copy(model, 'MergLA', change_params_list)
     insertion_points = _MergLA_model_scan(MergLA_model, new_layers, mutated_layer_indices)
     if len(insertion_points.keys()) == 0:
         mylogger.warning('no appropriate layer to insert')
@@ -917,13 +942,22 @@ def MergLA_mut(model, new_layers=None, mutated_layer_indices=None):
                 import keras
                 o2 = cloned_layer.output
                 x = layer_utils.available_model_merge_layers[merge_layer]([o1, o2])
+                if merge_layer == 'Concatenate':
+                    if len(cloned_layer.output_shape) == 2:
+                        add_layer = keras.layers.Dense(cloned_layer.output_shape[-1])
+                        add_layer.name += "_concat_reshape"
+                        x = add_layer(x)
+                    else:
+                        add_layer = keras.layers.Conv2D(filters=cloned_layer.output_shape[-1], kernel_size=3, padding="same")
+                        add_layer.name += "_concat_reshape"
+                        x = add_layer(x)
 
         output_tensors[layer.name] = x
         model_output = x
 
     new_model = keras.Model(inputs=MergLA_model_i.inputs, outputs=model_output)
 
-    assert len(new_model.layers) == len(MergLA_model_i.layers) + 1
+    # assert len(new_model.layers) == len(MergLA_model_i.layers) + 1
     tuples = []
     import time
     old_model_layers = {}
@@ -958,7 +992,8 @@ def MergLA_mut(model, new_layers=None, mutated_layer_indices=None):
 
 
 def LC_mut(model, mutated_layer_indices=None):
-    LC_model = utils.ModelUtils.model_copy(model, 'LC')
+    change_params_list = _random_layers_scan(model)
+    LC_model = utils.ModelUtils.model_copy(model, 'LC', change_params_list)
     available_layer_indices = _LC_and_LR_scan(LC_model, mutated_layer_indices)
 
     if len(available_layer_indices) == 0:
@@ -1048,7 +1083,8 @@ def LC_mut(model, mutated_layer_indices=None):
 
 
 def LR_mut(model, mutated_layer_indices=None):
-    LR_model = utils.ModelUtils.model_copy(model, 'LR')
+    change_params_list = _random_layers_scan(model)
+    LR_model = utils.ModelUtils.model_copy(model, 'LR', change_params_list)
     available_layer_indices = _LC_and_LR_scan(LR_model, mutated_layer_indices)
 
     if len(available_layer_indices) == 0:
@@ -1128,7 +1164,8 @@ def LR_mut(model, mutated_layer_indices=None):
 
 
 def LS_mut(model):
-    LS_model = utils.ModelUtils.model_copy(model, "LS")
+    change_params_list = _random_layers_scan(model)
+    LS_model = utils.ModelUtils.model_copy(model, "LS", change_params_list)
     shape_dict = _LS_scan(LS_model)
     layers = LS_model.layers
 
